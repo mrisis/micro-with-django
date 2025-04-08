@@ -1,0 +1,113 @@
+#version: '3.8'
+
+services:
+  # API Gateway
+  api_gateway:
+    build: ./api_gateway
+    env_file:
+      - ./api_gateway/.env
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth_service:
+        condition: service_started
+      social_service:
+        condition: service_started
+    networks:
+      app_network:
+         aliases:
+            - api
+
+    restart: always
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=your-secret-key-here
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/api_gateway
+      - ALLOWED_HOSTS=*,localhost,127.0.0.1,0.0.0.0
+
+  # Auth Service
+  auth_service:
+    build: ./auth_service
+    env_file:
+      - ./auth_service/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      app_network:
+         aliases:
+            - auth
+
+    restart: always
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=your-secret-key-here
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/auth_service
+      - ALLOWED_HOSTS=*,localhost,127.0.0.1,0.0.0.0
+
+  # Social Service
+  social_service:
+    build: ./social_service
+    env_file:
+      - ./social_service/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      app_network:
+         aliases:
+            - social
+
+
+
+    restart: always
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=your-secret-key-here
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/social_service
+      - ALLOWED_HOSTS=*,localhost,127.0.0.1,0.0.0.0
+
+  # Postgres
+  postgres:
+    image: postgres:15
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+
+
+
